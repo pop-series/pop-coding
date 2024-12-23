@@ -6,6 +6,7 @@ let QUIT_KEY_COD = 81
 TODO:
 1. Error in compress()
 2. Better use of observer pattern for game state transition
+
  */
 
 
