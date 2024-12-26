@@ -11,27 +11,6 @@ function draw() {
     push()
     game.show()
     pop()
-    
-    // background(220);
-    // textAlign(CENTER, CENTER);
-    // textSize(30); // Increased text size
-    
-    // let letters = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J'];
-    // let boxSize = 50;
-    
-    // for(let i = 0; i < 10; i++) {
-    //   let x = 50 + i*60;
-    //   let y = 50;
-      
-    //   // Draw box
-    //   fill(255);  // White background
-    //   rect(x, y, boxSize, boxSize);
-      
-    //   // Draw text
-    //   fill(0);    // Black text
-    //   noStroke();
-    //   text(letters[i], x, y);
-    // }
 }
 
 function keyPressed(){
@@ -69,7 +48,6 @@ class Game {
             .set(UP_ARROW, this.moveUp)
             .set(RIGHT_ARROW, this.moveRight)
             .set(DOWN_ARROW, this.moveDown)
-        // this.initializeState()
     }
 
     show() {
@@ -81,13 +59,24 @@ class Game {
 
         textAlign(CENTER, CENTER)
         textSize(48)
+        colorMode(HSB)
         for(let y=0; y<this.boardSize; y++) {
             for (let x=0; x<this.boardSize; x++) {
                 let [py, px] = [y*this.cellSize, x*this.cellSize]
+                fill(...this.getCellColor(this.board[y][x]))
                 square(px, py, this.cellSize, 10)
+                fill(0, 0, 0)
                 text(this.board[y][x], px, py)
             }
         }
+    }
+
+    getCellColor(value) {
+        let saturation = 0
+        if (value !== EMPTY_CELL) {
+            saturation = Math.log2(value) * 5
+        }
+        return [50, saturation, 100]
     }
 
     initializeState() {
@@ -97,12 +86,33 @@ class Game {
     }
 
     generateNewCell() {
-        let [y, x] = this.chooseRandomNonEmptyCell()
+        let emptyCells = []
+        for(let y=0; y<this.boardSize; y++) {
+            for (let x=0; x<this.boardSize; x++) {
+                if (this.board[y][x] === EMPTY_CELL) {
+                    emptyCells.push([y, x])
+                }
+            }
+        }
+        if (emptyCells.length === 0) {
+            return false
+        }
+        let [y, x] = emptyCells[floor(random(emptyCells.length))]
         this.board[y][x] = this.chooseRandomCellValue()
+        return true
     }
 
-    chooseRandomNonEmptyCell() {
-        return [floor(random(this.boardSize)), floor(random(this.boardSize))]
+    isGameOver() {
+        for (let y=0; y<this.boardSize; y++) {
+            for (let x=0; x<this.boardSize; x++) {
+                if (this.board[y][x] === EMPTY_CELL || 
+                    (x < this.boardSize-1 && this.board[y][x] == this.board[y][x+1]) ||
+                    (y < this.boardSize-1 && this.board[y][x] == this.board[y+1][x])) {
+                    return false
+                }
+            }
+        }
+        return true
     }
 
     chooseRandomCellValue() {
@@ -139,7 +149,9 @@ class Game {
                 if (this.state.get() === PLAYING) {
                     let cmd = this.arrowCommand.get(keyCode)
                     if (cmd()) {
-                        this.generateNewCell()
+                        if (!this.generateNewCell() || this.isGameOver()) {
+                            this.state.transition(DEFAULT_ACTION)
+                        }
                     }
                 }
                 break
@@ -147,41 +159,119 @@ class Game {
     }
 
     moveLeft = () => {
-        console.log('cmd left')
-        return false
-    }
-
-    moveUp = () =>  {
-        console.log('cmd up')
-        return false
-    }
-
-    moveRight = () => {
-        console.log('cmd right')
-        return false
-    }
-
-    moveDown = () => {
         let swap = false
-        for(let y=0; y<this.boardSize-1; y++) {
-            for (let x=0; x<this.boardSize; x++) {
-                swap = this.tryUpdateCells(y+1, x, y, x) || swap
+        for (let y=0; y<this.boardSize; y++) {
+            let arr = [...this.board[y]].reverse()
+            let compacted = this.compact(arr)
+            let diff = this.boardSize - compacted.length
+            if (diff > 0) {
+                swap = true
+                for (let x=0; x<this.boardSize; x++) {
+                    if (x >= compacted.length) {
+                        this.board[y][x] = EMPTY_CELL
+                    } else {
+                        this.board[y][x] = compacted[compacted.length-1-x]
+                    }
+                }
             }
         }
         return swap
     }
 
-    tryUpdateCells(y1, x1, y2, x2) {
-        if (this.board[y1][x1] === EMPTY_CELL) {
-            if (this.board[y2][x2] !== EMPTY_CELL) {
-                [this.board[y1][x1], this.board[y2][x2]] = [this.board[y2][x2], this.board[y1][x1]]
-                return true
+    moveUp = () =>  {
+        let swap = false
+        for (let x=0; x<this.boardSize; x++) {
+            let arr = this.board.map(row => row[x]).reverse()
+            let compacted = this.compact(arr)
+            let diff = this.boardSize - compacted.length
+            if (diff > 0) {
+                swap = true
+                for (let y=0; y<this.boardSize; y++) {
+                    if (y >= compacted.length) {
+                        this.board[y][x] = EMPTY_CELL
+                    } else {
+                        this.board[y][x] = compacted[compacted.length-1-y]
+                    }
+                }
             }
-        } else if (this.board[y1][x1] === this.board[y2][x2]) {
-            [this.board[y1][x1], this.board[y2][x2]] = [2*this.board[y1][x1], EMPTY_CELL]
-            return true
         }
-        return false
+        return swap
+    }
+
+    moveRight = () => {
+        let swap = false
+        for (let y=0; y<this.boardSize; y++) {
+            let arr = this.board[y]
+            let compacted = this.compact(arr)
+            let diff = this.boardSize - compacted.length
+            if (diff > 0) {
+                swap = true
+                for (let x=0; x<this.boardSize; x++) {
+                    if (x < diff) {
+                        this.board[y][x] = EMPTY_CELL
+                    } else {
+                        this.board[y][x] = compacted[x-diff]
+                    }
+                }
+            }
+        }
+        return swap
+    }
+
+    moveDown = () => {
+        let swap = false
+        for (let x=0; x<this.boardSize; x++) {
+            let arr = this.board.map(row => row[x])
+            let compacted = this.compact(arr)
+            let diff = this.boardSize - compacted.length
+            if (diff > 0) {
+                swap = true
+                for (let y=0; y<this.boardSize; y++) {
+                    if (y < diff) {
+                        this.board[y][x] = EMPTY_CELL
+                    } else {
+                        this.board[y][x] = compacted[y-diff]
+                    }
+                }
+            }
+        }
+        return swap
+    }
+
+    /*
+    edge cases:
+    [2, 2, 2, 2]    => [4, 4]
+    [2, 2, 2, 4]    => [4, 2, 4]
+    [2, '', '', 2]  => [4]
+    [2, '', 2, '']  => [4]
+    [2, 2, '', 4]   => [4, 4]
+    ['', 2, 2, 2]   => ['', 4, 2]
+    ['', 2, 2, 4]   => ['', 4, 4]
+    */
+    compact(arr) {
+        let compactArr = []
+        let i = 0
+        let ci = -1
+        while (i < arr.length && arr[i] === EMPTY_CELL) {
+            compactArr.push(arr[i])
+            i++
+            ci++
+        }
+        let canMerge = true
+        for(; i<arr.length; i++) {
+            if (arr[i] === EMPTY_CELL) {
+                continue
+            }
+            if (ci < 0 || compactArr[ci] !== arr[i] || !canMerge) {
+                compactArr.push(arr[i])
+                canMerge = true
+                ci++
+            } else {
+                compactArr[ci] = 2*arr[i]
+                canMerge = false
+            }
+        }
+        return compactArr
     }
 }
 
